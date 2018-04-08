@@ -4,15 +4,15 @@
 # BUILD: docker build --rm -t wongwill86/air-tasks:base-alpine -f /docker/base/Dockerfile.base-slim .
 # SOURCE: https://github.com/wongwill86/air-tasks
 
-# Compile AWS credential helper
-FROM golang:1.8.3 as aws_ecr_credential_helper
-WORKDIR /go/src/github.com/awslabs/
-RUN git clone https://github.com/awslabs/amazon-ecr-credential-helper.git
-WORKDIR /go/src/github.com/awslabs/amazon-ecr-credential-helper
+# Compile GCR credential helper
+FROM golang:1.8.3 as gcr_credential_helper
+WORKDIR /go/src/github.com/GoogleCloudPlatform/
+RUN git clone https://github.com/GoogleCloudPlatform/docker-credential-gcr
+WORKDIR /go/src/github.com/GoogleCloudPlatform/docker-credential-gcr
 RUN make
 
 FROM python:3.6-alpine3.7
-LABEL maintainer=wongwill86
+LABEL maintainer=rllin
 
 ARG AIRFLOW_VERSION=1.9.0
 ARG DOCKER_VERSION=17.12.0-ce
@@ -63,23 +63,20 @@ RUN set -ex \
 RUN delgroup ping
 RUN addgroup -g 999 docker
 
-# copy the built docker credentials module to this container
-COPY --from=aws_ecr_credential_helper \
-    /go/src/github.com/awslabs/amazon-ecr-credential-helper/bin/local/docker-credential-ecr-login \
-    /usr/local/bin
 
-# this is to enable aws ecr credentials helpers to reauthorize docker
-RUN mkdir -p /.docker/ \
-    && echo '{\n    "credsStore": "ecr-login"\n}' > \
-        /.docker/config.json
+RUN apk add --no-cache wget unzip python2 python3
+RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-sdk.zip\
+ && unzip google-cloud-sdk.zip\
+ && rm google-cloud-sdk.zip\
+ && google-cloud-sdk/install.sh\
+  --usage-reporting=true\
+  --path-update=true\
+  --bash-completion=true\
+  --rc-path=/.bashrc\
+  --additional-components\
+   cloud-datastore-emulator\
+   docker-credential-gcr\
+   gsutil\
+   kubectl
 
-# Get commit hash and tags these three files need to be excluded from .dockerignore:
-# .git/refs/heads/
-# .git/refs/tags/
-# .git/HEAD
-COPY .git .git
-RUN mkdir version
-RUN cat .git/refs/$(cat .git/HEAD | sed -e's/ref: refs\///g') > version/COMMIT \
-    && grep $(cat version/COMMIT) .git/refs/tags/* -l | xargs -n 1 -r basename > version/TAGS \
-    && mv version/COMMIT version/base.COMMIT.alpine \
-    && mv version/TAGS version/base.TAGS.alpine
+ENV PATH=/google-cloud-sdk/bin:$PATH

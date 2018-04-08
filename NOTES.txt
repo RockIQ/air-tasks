@@ -1,0 +1,2 @@
+docker build -f docker/base/Dockerfile.base-alpine -t gcr.io/valid-spark-194220/air-tasks:base-alpine .
+docker build -f docker/Dockerfile -t gcr.io/valid-spark-194220/air-tasks:alpine .
